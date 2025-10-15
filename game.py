@@ -1,18 +1,23 @@
-# tower_defense_final_optimized.py
-# Versión optimizada del Tower Defense final (mismas funcionalidades que la versión anterior).
-# Guarda y ejecuta. Requiere pygame.
+# tower_defense_final_optimized_ui.py
+# Versión optimizada + UI y mapa mejorado sin quitar funcionalidades.
+# Ejecutar con pygame instalado.
 
 import pygame, sys, math, heapq, random
 from collections import deque
 
 # -----------------------
-# CONFIG
+# CONFIG (pantalla más grande + HUD mayor)
 # -----------------------
-TILE_SIZE = 36
-GRID_W = 18
-GRID_H = 13
-SCREEN_W = TILE_SIZE * GRID_W
-SCREEN_H = TILE_SIZE * GRID_H + 140
+TILE_SIZE = 40        # agrandado para más "presencia"
+GRID_W = 20
+GRID_H = 15
+MAP_W_PX = TILE_SIZE * GRID_W
+MAP_H_PX = TILE_SIZE * GRID_H
+
+HUD_HEIGHT = 180
+SCREEN_W = MAP_W_PX
+SCREEN_H = MAP_H_PX + HUD_HEIGHT
+
 FPS = 60
 
 START_MONEY = 300
@@ -31,27 +36,29 @@ SHADOW_OFFSET = 6
 PARTICLE_COUNT = 14
 DAMAGE_POPUP_LIFE = 0.9
 
-# colors
+# Colors
 WHITE = (255,255,255)
 BLACK = (0,0,0)
-BG_TOP = (18,24,45)
-BG_BOTTOM = (6,9,20)
+BG_TOP = (20,28,52)
+BG_BOTTOM = (8,12,28)
 YELLOW = (255,215,80)
 RED = (220,70,70)
 GREEN = (80,220,110)
 GOLD = (240,200,60)
+UI_BG = (14,14,18)
 
 pygame.init()
 screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
-pygame.display.set_caption("Tower Defense - Optimized Final")
+pygame.display.set_caption("Tower Defense — UI & Map Mejorado (Optimizado)")
 clock = pygame.time.Clock()
 font = pygame.font.SysFont("Arial", 18)
+font_bold = pygame.font.SysFont("Arial", 20, bold=True)
 small_font = pygame.font.SysFont("Arial", 14)
 
-RAND = random.Random()
+RAND = random.Random(12345)  # semilla para reproducibilidad visual
 
 # -----------------------
-# PATHFINDING A*
+# Pathfinding A*
 # -----------------------
 def heuristic(a,b): return abs(a[0]-b[0]) + abs(a[1]-b[1])
 def neighbors(node, grid):
@@ -62,55 +69,57 @@ def neighbors(node, grid):
             if not grid[ny][nx]:
                 yield (nx,ny)
 
-# We'll wrap astar so it can accept the combined_grid passed externally (to use cache)
 def astar_on_grid(grid, start, goal):
     if start==goal: return [start]
-    open_set = []
-    heapq.heappush(open_set, (heuristic(start,goal), 0, start))
-    came_from = {}
-    cost_so_far = {start:0}
+    open_set=[]
+    heapq.heappush(open_set,(heuristic(start,goal), 0, start))
+    came_from={}
+    cost_so_far={start:0}
     while open_set:
         _, cost, current = heapq.heappop(open_set)
         if current==goal:
             path=[current]
             while current in came_from:
-                current=came_from[current]; path.append(current)
+                current = came_from[current]; path.append(current)
             path.reverse(); return path
         for n in neighbors(current, grid):
             new_cost = cost_so_far[current] + 1
             if n not in cost_so_far or new_cost < cost_so_far[n]:
-                cost_so_far[n]=new_cost
+                cost_so_far[n] = new_cost
                 priority = new_cost + heuristic(n,goal)
                 heapq.heappush(open_set, (priority, new_cost, n))
-                came_from[n]=current
+                came_from[n] = current
     return None
 
 # -----------------------
-# Procedural asset generation (cached)
+# Procedural sprites (cached)
 # -----------------------
 def make_tower_sprite(kind):
-    s = pygame.Surface((48,48), pygame.SRCALPHA)
-    cx,cy = 24,24
-    pygame.draw.ellipse(s, (10,10,10,160), (6,26,36,12))
-    if kind=='basic': base=(40,60,90); ring=(80,120,180)
-    elif kind=='slow': base=(70,40,90); ring=(150,100,200)
-    elif kind=='splash': base=(60,80,40); ring=(170,190,80)
+    s = pygame.Surface((56,56), pygame.SRCALPHA)
+    cx,cy = 28,28
+    # shadow ellipse
+    pygame.draw.ellipse(s, (8,8,8,160), (8,34,40,12))
+    # base and ring
+    if kind=='basic': base=(46,66,96); ring=(86,126,186)
+    elif kind=='slow': base=(86,56,106); ring=(176,126,206)
+    elif kind=='splash': base=(70,92,52); ring=(190,210,100)
     elif kind=='rapid': base=(30,130,140); ring=(100,200,210)
     elif kind=='multi': base=(150,90,30); ring=(220,160,80)
     elif kind=='pierce': base=(140,40,40); ring=(200,80,80)
     elif kind=='ultimate': base=(200,160,40); ring=(255,230,120)
-    else: base=(60,60,60); ring=(160,160,160)
-    pygame.draw.circle(s, base, (cx,cy), 18)
+    else: base=(70,70,70); ring=(160,160,160)
+    pygame.draw.circle(s, base, (cx,cy), 20)
     pygame.draw.circle(s, ring, (cx,cy), 12)
+    # ornament
     if kind=='basic':
-        pygame.draw.rect(s, (220,220,240), (cx-3,cy-18,6,12))
+        pygame.draw.rect(s,(230,230,240),(cx-3,cy-18,6,12))
     elif kind=='slow':
-        pygame.draw.polygon(s, (180,180,255), [(cx,cy-18),(cx-6,cy-6),(cx+6,cy-6)])
+        pygame.draw.polygon(s,(200,200,255),[(cx,cy-18),(cx-6,cy-6),(cx+6,cy-6)])
     elif kind=='splash':
-        pygame.draw.circle(s, (240,240,160), (cx,cy), 6, 2)
+        pygame.draw.circle(s,(240,240,160),(cx,cy),6,2)
     elif kind=='rapid':
         for i in range(-2,3):
-            pygame.draw.line(s, (200,240,240), (cx+i*2,cy-14),(cx+i*2,cy-6),2)
+            pygame.draw.line(s,(200,240,240),(cx+i*2,cy-14),(cx+i*2,cy-6),2)
     elif kind=='multi':
         for a in (-0.6,0,0.6):
             bx = cx + math.cos(a)*14; by = cy + math.sin(a)*14
@@ -124,20 +133,21 @@ def make_tower_sprite(kind):
     return s
 
 def make_enemy_sprite(kind):
-    s = pygame.Surface((40,40), pygame.SRCALPHA)
-    cx,cy=20,20
+    s = pygame.Surface((44,44), pygame.SRCALPHA)
+    cx,cy = 22,22
     if kind=='scout': col=(200,240,120)
     elif kind=='grunt': col=(200,60,60)
     elif kind=='tank': col=(120,120,200)
-    elif kind=='sapper': col=(200,120,60)
+    elif kind=='sapper': col=(220,150,80)
     else: col=(180,180,180)
-    pygame.draw.ellipse(s,(12,12,12,180),(6,24,28,8))
-    pygame.draw.circle(s,col,(cx,cy),12)
-    pygame.draw.circle(s,(max(0,col[0]-80),max(0,col[1]-40),max(0,col[2]-40)),(cx-4,cy-4),6)
+    pygame.draw.ellipse(s,(12,12,12,180),(8,30,28,8))
+    pygame.draw.circle(s,col,(cx,cy),14)
+    pygame.draw.circle(s,(max(0,col[0]-80),max(0,col[1]-40),max(0,col[2]-40)),(cx-5,cy-5),7)
     if kind=='sapper':
-        pygame.draw.rect(s, (20,20,20), (cx-6,cy-6,12,4))
+        pygame.draw.rect(s,(24,24,24),(cx-6,cy-6,12,4))
     return s
 
+# pre-generate sprites
 SPRITES = {}
 for k in ('basic','slow','splash','rapid','multi','pierce','ultimate'):
     SPRITES['tower_'+k] = make_tower_sprite(k)
@@ -145,23 +155,24 @@ for k in ('scout','grunt','tank','sapper'):
     SPRITES['enemy_'+k] = make_enemy_sprite(k)
 
 # -----------------------
-# Effects
+# Effects: particles, popups, shake (slim, __slots__ for speed)
 # -----------------------
 class Particle:
     __slots__ = ('x','y','vx','vy','life','age','size','color')
     def __init__(self,x,y):
         self.x=x+RAND.uniform(-6,6); self.y=y+RAND.uniform(-6,6)
-        a=RAND.uniform(0,2*math.pi); s=RAND.uniform(1.5,4.0)
-        self.vx=math.cos(a)*s; self.vy=math.sin(a)*s
-        self.life=RAND.uniform(0.5,1.1); self.age=0
-        self.size=RAND.randint(2,4)
-        self.color=(RAND.randint(160,255), RAND.randint(80,220), RAND.randint(60,220))
+        a = RAND.uniform(0,2*math.pi); s = RAND.uniform(1.6,4.0)
+        self.vx = math.cos(a)*s; self.vy = math.sin(a)*s
+        self.life = RAND.uniform(0.5,1.1); self.age = 0
+        self.size = RAND.randint(2,4)
+        self.color = (RAND.randint(160,255), RAND.randint(90,220), RAND.randint(60,220))
     def update(self,dt):
         self.age += dt; self.x += self.vx*dt*60; self.y += self.vy*dt*60; self.vy += 0.06*dt*60
     def draw(self,surf):
         t = 1 - (self.age/self.life)
         if t <= 0: return
-        pygame.draw.circle(surf, self.color, (int(self.x), int(self.y)), max(1, int(self.size * t)))
+        r = max(1, int(self.size * t))
+        pygame.draw.circle(surf, self.color, (int(self.x), int(self.y)), r)
 
 class DamagePopup:
     __slots__ = ('x','y','text','color','age','life','vy')
@@ -197,7 +208,7 @@ SHAKE = ScreenShake()
 class Projectile:
     __slots__ = ('x','y','prev','target','damage','kind','owner_tower','speed','alive','vx','vy','pierce_remaining','hit_ids')
     def __init__(self,x,y,target=None,damage=15,kind='basic',owner_tower=None,vx=None,vy=None,pierce_count=0):
-        self.x=x; self.y=y; self.prev=deque(maxlen=6); self.prev.append((x,y))
+        self.x=x; self.y=y; self.prev=deque(maxlen=8); self.prev.append((x,y))
         self.target=target; self.damage=damage; self.kind=kind; self.owner_tower=owner_tower
         self.speed=PROJECTILE_SPEED; self.alive=True
         if vx is not None and vy is not None:
@@ -208,7 +219,6 @@ class Projectile:
         self.pierce_remaining = pierce_count
         self.hit_ids = set()
     def update(self, enemies):
-        # localize for speed
         kind = self.kind
         if kind in ('basic','slow','splash'):
             tgt = self.target
@@ -216,12 +226,10 @@ class Projectile:
                 nearest=None; nd=None
                 for e in enemies:
                     if not e.alive: continue
-                    dx = e.x - self.x; dy = e.y - self.y
-                    d2 = dx*dx + dy*dy
+                    dx = e.x - self.x; dy = e.y - self.y; d2 = dx*dx + dy*dy
                     if nd is None or d2 < nd: nd = d2; nearest = e
-                if nearest: self.target = nearest
+                if nearest: self.target = nearest; tgt = nearest
                 else: self.alive=False; return
-                tgt = self.target
             dx = tgt.x - self.x; dy = tgt.y - self.y
             dist = math.hypot(dx,dy)
             if dist < 6:
@@ -231,20 +239,20 @@ class Projectile:
                 elif kind == 'slow':
                     if tgt.alive:
                         tgt.hp -= self.damage
-                        st = getattr(self.owner_tower,'slow_time',1.5); sf = getattr(self.owner_tower,'slow_amount',0.5)
+                        st = getattr(self.owner_tower,'extra',{}).get('slow_time',1.5)
+                        sf = getattr(self.owner_tower,'extra',{}).get('slow_amount',0.5)
                         tgt.apply_slow(sf,st)
                 elif kind == 'splash':
-                    # handled by Game after projectile removal
                     pass
-                self.alive = False; return
-            nx = dx / dist; ny = dy / dist
+                self.alive=False; return
+            nx = dx/dist; ny = dy/dist
             self.prev.append((self.x,self.y)); self.x += nx*self.speed; self.y += ny*self.speed
         elif kind == 'pierce':
             if self.vx is None or self.vy is None:
-                self.alive = False; return
+                self.alive=False; return
             self.prev.append((self.x,self.y)); self.x += self.vx*self.speed; self.y += self.vy*self.speed
-            if self.x < -20 or self.x > SCREEN_W+20 or self.y < -20 or self.y > SCREEN_H+20:
-                self.alive = False; return
+            if self.x < -20 or self.x > MAP_W_PX+20 or self.y < -20 or self.y > MAP_H_PX+20:
+                self.alive=False; return
             for e in enemies:
                 if not e.alive: continue
                 eid = id(e)
@@ -253,22 +261,20 @@ class Projectile:
                 if dx*dx + dy*dy <= 12*12:
                     e.hp -= self.damage; self.hit_ids.add(eid); self.pierce_remaining -= 1
                     if self.pierce_remaining <= 0:
-                        self.alive = False; break
+                        self.alive=False; break
         else:
             # fallback homing
             tgt = self.target
-            if tgt is None:
-                self.alive = False; return
+            if tgt is None: self.alive=False; return
             dx = tgt.x - self.x; dy = tgt.y - self.y
             dist = math.hypot(dx,dy)
             if dist < 6:
                 if tgt.alive: tgt.hp -= self.damage
-                self.alive = False; return
+                self.alive=False; return
             nx = dx/dist; ny = dy/dist
             self.prev.append((self.x,self.y)); self.x += nx*self.speed; self.y += ny*self.speed
-    def draw(self, surf):
+    def draw(self,surf):
         pts = list(self.prev) + [(self.x,self.y)]
-        # draw simple trail without creating surfaces (faster)
         for i in range(len(pts)-1):
             a = pts[i]; b = pts[i+1]
             width = max(1, 4 - (len(pts)-1 - i)//2)
@@ -285,11 +291,10 @@ class Projectile:
             pygame.draw.circle(surf, YELLOW, (int(self.x), int(self.y)), 5)
 
 # -----------------------
-# Tower
+# Tower (destructible) — ahora dibujamos sprite + cañón rotatorio encima
 # -----------------------
 class Tower:
-    __slots__ = ('gx','gy','x','y','kind','angle','cooldown','range','rate','damage','hp','max_hp',
-                 'sprite','extra')
+    __slots__ = ('gx','gy','x','y','kind','angle','cooldown','range','rate','damage','hp','max_hp','sprite','extra')
     def __init__(self,gx,gy,kind='basic'):
         self.gx=gx; self.gy=gy; self.x=gx*TILE_SIZE + TILE_SIZE//2; self.y=gy*TILE_SIZE + TILE_SIZE//2
         self.kind=kind; self.angle=0; self.cooldown=0.0; self.extra = {}
@@ -305,22 +310,21 @@ class Tower:
         self.sprite = SPRITES.get('tower_'+kind)
     def update(self, dt, enemies, projectiles, game):
         self.cooldown -= dt
-        # nearest in range (compare squared distances)
-        best = None; bd2 = None; rx = self.range; r2 = rx*rx
+        # nearest in range (squared distance)
+        best=None; bd2=None; r2 = self.range * self.range
         for e in enemies:
             if not e.alive: continue
             dx = e.x - self.x; dy = e.y - self.y; d2 = dx*dx + dy*dy
             if d2 <= r2:
-                if bd2 is None or d2 < bd2:
-                    bd2 = d2; best = e
+                if bd2 is None or d2 < bd2: bd2 = d2; best = e
         if best:
             desired = math.atan2(best.y - self.y, best.x - self.x)
-            diff = (desired - self.angle + math.pi)%(2*math.pi) - math.pi
+            diff = (desired - self.angle + math.pi) % (2*math.pi) - math.pi
             self.angle += diff * min(1, dt*8)
         else:
-            self.angle += 0.005*dt*60
+            self.angle += 0.005 * dt * 60
         if best and self.cooldown <= 0:
-            px = self.x + math.cos(self.angle)*12; py = self.y + math.sin(self.angle)*12
+            px = self.x + math.cos(self.angle)*14; py = self.y + math.sin(self.angle)*14
             k = self.kind
             if k == 'basic':
                 projectiles.append(Projectile(px,py,target=best,damage=self.damage,kind='basic',owner_tower=self))
@@ -341,36 +345,40 @@ class Tower:
                 vx = math.cos(self.angle); vy = math.sin(self.angle)
                 projectiles.append(Projectile(px,py,target=None,damage=self.damage,kind='pierce',owner_tower=self,vx=vx,vy=vy,pierce_count=self.extra.get('pierce_count',3)))
             elif k == 'ultimate':
-                # ultimate: big AOE at target
                 projectiles.append(Projectile(px,py,target=best,damage=self.damage,kind='splash',owner_tower=self))
                 SHAKE.start(0.25, 6)
             self.cooldown = self.rate
     def draw(self, surf):
-        # draw sprite
-        surf.blit(self.sprite, (self.x - self.sprite.get_width()/2, self.y - self.sprite.get_height()/2))
+        # sprite base (non-rotating) + rotating barrel drawn on top
+        surf.blit(self.sprite, (int(self.x - self.sprite.get_width()/2), int(self.y - self.sprite.get_height()/2)))
+        # draw rotating barrel as a line to recover animation lost by sprite-only
+        barrel_len = 20 if self.kind != 'ultimate' else 28
+        bx = self.x + math.cos(self.angle) * barrel_len
+        by = self.y + math.sin(self.angle) * barrel_len
+        width = 5 if self.kind != 'rapid' else 3
+        pygame.draw.line(surf, (230,230,230), (int(self.x), int(self.y)), (int(bx), int(by)), width)
         # health bar
-        w = 36; h = 6
-        bx = self.x - w//2; by = self.y - TILE_SIZE//2 - 10
+        w = 40; h = 7
+        bx = int(self.x - w//2); by = int(self.y - TILE_SIZE//2 - 12)
         pygame.draw.rect(surf, (30,30,30), (bx,by,w,h))
         hp_w = int(w * max(0, self.hp)/max(1, self.max_hp))
         pygame.draw.rect(surf, (60,200,90), (bx,by,hp_w,h))
         if self.kind == 'ultimate':
-            pygame.draw.circle(surf, (255,220,100), (int(self.x), int(self.y)), 26, 3)
+            pygame.draw.circle(surf, (255,220,100), (int(self.x), int(self.y)), 28, 3)
 
 # -----------------------
-# Enemy
+# Enemy (con comportamiento de atacar torres)
 # -----------------------
 class Enemy:
     TYPE_PROPS = {
         'scout': {'color':(200,240,120),'speed_mult':1.6,'hp_base':40,'reward':6},
         'grunt': {'color':(200,60,60),'speed_mult':1.0,'hp_base':80,'reward':10},
-        'tank':  {'color':(120,120,200),'speed_mult':0.6,'hp_base':180,'reward':20},
+        'tank' : {'color':(120,120,200),'speed_mult':0.6,'hp_base':180,'reward':20},
         'sapper':{'color':(220,150,80),'speed_mult':0.85,'hp_base':100,'reward':14}
     }
     __slots__ = ('kind','path','x','y','base_speed','speed','hp','max_hp','reward','alive','repath_timer','bob_phase','jitter_offset','display_hp','attack_cooldown','attack_rate','attack_damage','attacking_tower','slow_timer','slow_factor')
     def __init__(self,path_pixels,kind='grunt',speed=None,hp=None,reward=None,jitter_offset=None):
-        self.kind = kind
-        self.path = deque(path_pixels)
+        self.kind=kind; self.path=deque(path_pixels)
         if self.path: self.x,self.y = self.path[0]
         else: self.x,self.y = 0,0
         props = Enemy.TYPE_PROPS.get(kind, Enemy.TYPE_PROPS['grunt'])
@@ -395,7 +403,7 @@ class Enemy:
         self.slow_timer = max(self.slow_timer, duration)
     def update(self, grid, goal_tile, dt, tile_path_func, towers, game):
         if not self.alive: return
-        self.bob_phase += dt*3
+        self.bob_phase += dt * 3
         bob = math.sin(self.bob_phase) * 3
         if self.slow_timer > 0:
             self.slow_timer -= dt
@@ -403,10 +411,10 @@ class Enemy:
         current_speed = self.base_speed * self.slow_factor
         target_tower = None
         if self.kind == 'sapper':
-            bd = None
+            bd=None
             for t in towers:
                 dx = t.x - self.x; dy = t.y - self.y; d2 = dx*dx + dy*dy
-                if bd is None or d2 < bd: bd = d2; target_tower = t
+                if bd is None or d2 < bd: bd=d2; target_tower = t
         else:
             for t in towers:
                 dx = t.x - self.x; dy = t.y - self.y
@@ -431,7 +439,7 @@ class Enemy:
             if self.repath_timer >= ENEMY_REPATH_INTERVAL:
                 self.repath_timer = 0
             return
-        # follow path to goal
+        # else follow path
         if not self.path:
             self.alive = False; return
         tx,ty = self.path[0]; tx += self.jitter_offset[0]; ty += self.jitter_offset[1]
@@ -457,30 +465,33 @@ class Enemy:
                     pixel_path = [(p[0]+j[0], p[1]+j[1]) for p,j in zip(pixel_path, jitter)]
                     self.path = deque(pixel_path)
     def draw(self, surf):
-        pygame.draw.ellipse(surf,(12,12,12,180),(self.x-14,self.y-8+SHADOW_OFFSET,28,10))
+        # shadow ellipse
+        pygame.draw.ellipse(surf,(12,12,12,180),(self.x-16,self.y-9+SHADOW_OFFSET,32,11))
         sprite = SPRITES.get('enemy_'+self.kind)
-        surf.blit(sprite, (self.x - sprite.get_width()/2, self.y - sprite.get_height()/2))
+        surf.blit(sprite, (int(self.x - sprite.get_width()/2), int(self.y - sprite.get_height()/2)))
+        # hp bar
         self.display_hp += (self.hp - self.display_hp) * 0.12
-        hp_w = (TILE_SIZE-6) * max(0, self.display_hp / max(1, self.max_hp))
-        rect_back = pygame.Rect(self.x - (TILE_SIZE-6)/2, self.y - TILE_SIZE//2 - 10, TILE_SIZE-6, 6)
+        hp_w = (TILE_SIZE-8) * max(0, self.display_hp / max(1, self.max_hp))
+        rect_back = pygame.Rect(self.x - (TILE_SIZE-8)/2, self.y - TILE_SIZE//2 - 10, TILE_SIZE-8, 6)
         pygame.draw.rect(surf, (30,30,30), rect_back)
         pygame.draw.rect(surf, (60,200,90), (rect_back.x, rect_back.y, hp_w, rect_back.h))
 
 # -----------------------
-# Map & caching layers
+# Map & pre-render base (sin líneas de rejilla) + decor
 # -----------------------
 class GameMap:
     def __init__(self):
         self.grid = [ [0 for _ in range(GRID_W)] for __ in range(GRID_H) ]
+        # preset obstacles (unchanged)
         for i in range(4,7):
             for j in range(5,8):
-                self.grid[j][i] = 1
+                if 0<=i<GRID_W and 0<=j<GRID_H: self.grid[j][i] = 1
         for i in range(10,13):
             for j in range(2,5):
-                self.grid[j][i] = 1
+                if 0<=i<GRID_W and 0<=j<GRID_H: self.grid[j][i] = 1
         for i in range(8,11):
             for j in range(8,11):
-                self.grid[j][i] = 1
+                if 0<=i<GRID_W and 0<=j<GRID_H: self.grid[j][i] = 1
         self.spawn_tiles = [
             (0, GRID_H//2),
             (0, max(1, GRID_H//3)),
@@ -488,22 +499,38 @@ class GameMap:
         ]
         self.goal_tile = (GRID_W-1, GRID_H//2)
         self.tower_map = [ [0 for _ in range(GRID_W)] for __ in range(GRID_H) ]
-        self.tile_noise = [ [RAND.randint(-10,10) for _ in range(GRID_W)] for __ in range(GRID_H) ]
-        # pre-render base map surface (tiles + obstacles)
-        self.base_surf = pygame.Surface((SCREEN_W, SCREEN_H - 140))
+        # tile noise for decor
+        self.tile_noise = [ [RAND.randint(-12,12) for _ in range(GRID_W)] for __ in range(GRID_H) ]
+        # pre-render base map visual (tiles + obstacles + subtle stones)
+        self.base_surf = pygame.Surface((MAP_W_PX, MAP_H_PX))
         self._render_base()
     def _render_base(self):
-        surf = self.base_surf
-        for y in range(GRID_H):
-            for x in range(GRID_W):
-                rect = pygame.Rect(x*TILE_SIZE, y*TILE_SIZE, TILE_SIZE, TILE_SIZE)
-                base = 72 + self.tile_noise[y][x]
-                color = (base+12, base+20, base+30)
-                pygame.draw.rect(surf, color, rect)
-                if self.grid[y][x] == 1:
-                    pygame.draw.rect(surf, (95,95,95), rect.inflate(-6,-6))
-                pygame.draw.rect(surf, (12,12,18), rect, 1)
-    def set_tower(self,gx,gy,val):
+        s = self.base_surf
+        s.fill((0,0,0))
+        # vertical gradient on base (tile-level will blend)
+        for y in range(s.get_height()):
+            t = y / (s.get_height()-1)
+            r = int(BG_TOP[0] * (1-t) + BG_BOTTOM[0]*t)
+            g = int(BG_TOP[1] * (1-t) + BG_BOTTOM[1]*t)
+            b = int(BG_TOP[2] * (1-t) + BG_BOTTOM[2]*t)
+            pygame.draw.line(s, (r,g,b), (0,y), (s.get_width(), y))
+        # draw tiles with color variation and subtle stones (no grid lines)
+        for ty in range(GRID_H):
+            for tx in range(GRID_W):
+                base = 76 + self.tile_noise[ty][tx]
+                color = (base+10, base+18, base+26)
+                rect = pygame.Rect(tx*TILE_SIZE, ty*TILE_SIZE, TILE_SIZE, TILE_SIZE)
+                pygame.draw.rect(s, color, rect)
+                if self.grid[ty][tx] == 1:
+                    pygame.draw.rect(s, (96,96,96), rect.inflate(-10,-10))
+                # procedural stones: few semi-transparent small dots
+                stone_count = (abs(self.tile_noise[ty][tx]) % 4)
+                for i in range(stone_count):
+                    rx = tx*TILE_SIZE + RAND.randint(6, TILE_SIZE-6)
+                    ry = ty*TILE_SIZE + RAND.randint(6, TILE_SIZE-12)
+                    rr = RAND.randint(1,2)
+                    pygame.draw.circle(s, (0,0,0,30), (rx, ry), rr)
+    def set_tower(self, gx, gy, val):
         self.tower_map[gy][gx] = 1 if val else 0
     def get_combined_grid(self):
         combined = [ row[:] for row in self.grid ]
@@ -523,26 +550,35 @@ class GameMap:
                 px += RAND.uniform(-8,8); py += RAND.uniform(-8,8)
             res.append((px,py))
         return res
-    def draw(self,surf, tower_map_overlay=None):
-        # blit base
+    def draw(self, surf, tower_map_overlay=None, path_tiles=None):
+        # blit pre-rendered base
         surf.blit(self.base_surf, (0,0))
-        # draw tower_map overlay if provided (draw tower tiles)
+        # highlight path tiles subtly (non-invasive)
+        if path_tiles:
+            for (tx,ty) in path_tiles:
+                rect = pygame.Rect(tx*TILE_SIZE, ty*TILE_SIZE, TILE_SIZE, TILE_SIZE)
+                overlay = pygame.Surface((rect.w, rect.h), pygame.SRCALPHA)
+                overlay.fill((255,255,255,20))
+                surf.blit(overlay, (rect.x, rect.y))
+        # draw tower cells overlay (no grid borders)
         if tower_map_overlay is not None:
             for y in range(GRID_H):
                 for x in range(GRID_W):
                     if tower_map_overlay[y][x] == 1:
                         rect = pygame.Rect(x*TILE_SIZE, y*TILE_SIZE, TILE_SIZE, TILE_SIZE)
-                        pygame.draw.rect(surf, (30,90,150), rect.inflate(-8,-8))
-                        pygame.draw.rect(surf, (12,12,18), rect, 1)
-        # spawn and goal
+                        inner = rect.inflate(-10, -10)
+                        pygame.draw.rect(surf, (28,88,140), inner)
+        # draw spawn/goal markers
         for s in self.spawn_tiles:
             sx,sy = s
-            pygame.draw.rect(surf, (20,180,40),(sx*TILE_SIZE+6, sy*TILE_SIZE+6, TILE_SIZE-12, TILE_SIZE-12))
+            r = pygame.Rect(sx*TILE_SIZE+8, sy*TILE_SIZE+8, TILE_SIZE-16, TILE_SIZE-16)
+            pygame.draw.rect(surf, (26,180,60), r, border_radius=6)
         gx,gy = self.goal_tile
-        pygame.draw.rect(surf,(200,30,30),(gx*TILE_SIZE+6, gy*TILE_SIZE+6, TILE_SIZE-12, TILE_SIZE-12))
+        r2 = pygame.Rect(gx*TILE_SIZE+8, gy*TILE_SIZE+8, TILE_SIZE-16, TILE_SIZE-16)
+        pygame.draw.rect(surf, (200,40,40), r2, border_radius=6)
 
 # -----------------------
-# Game (with caches)
+# Game (con caché astar)
 # -----------------------
 class Game:
     def __init__(self):
@@ -558,20 +594,19 @@ class Game:
         self.wave_in_progress = False
         self.spawn_queue = []
         self.selected_tower_kind = 'basic'
-        # caches
+        # caches for pathfinding
         self._combined_grid = self.map.get_combined_grid()
         self._grid_version = 0
-        self._astar_cache = {}  # key: (start,goal,grid_version) -> path
-        # pre-render background gradient once
-        self._background = pygame.Surface((SCREEN_W, SCREEN_H - 140))
+        self._astar_cache = {}
+        # pre-render background gradient (for map area)
+        self._background = pygame.Surface((MAP_W_PX, MAP_H_PX))
         for y in range(self._background.get_height()):
-            t = y / (self._background.get_height() - 1)
+            t = y / (self._background.get_height()-1)
             r = int(BG_TOP[0]*(1-t) + BG_BOTTOM[0]*t)
             g = int(BG_TOP[1]*(1-t) + BG_BOTTOM[1]*t)
             b = int(BG_TOP[2]*(1-t) + BG_BOTTOM[2]*t)
-            pygame.draw.line(self._background, (r,g,b), (0,y), (SCREEN_W,y))
+            pygame.draw.line(self._background, (r,g,b), (0,y), (MAP_W_PX,y))
     def mark_grid_dirty(self):
-        # Call when tower_map changes (place/remove tower)
         self._combined_grid = self.map.get_combined_grid()
         self._grid_version += 1
         self._astar_cache.clear()
@@ -612,7 +647,7 @@ class Game:
             reward = props['reward'] + (self.wave-1)
             self.spawn_queue.append({'frames':spawn_frames, 'spec':{'kind':kind,'speed':speed,'hp':hp,'reward':reward}})
         self.spawn_queue.sort(key=lambda s: s['frames'])
-    def spawn_enemy(self, spec):
+    def spawn_enemy(self,spec):
         spawn_tile = RAND.choice(self.map.spawn_tiles)
         tile_path = self.astar_cached(spawn_tile, self.map.goal_tile)
         if tile_path is None:
@@ -628,7 +663,7 @@ class Game:
     def tile_path_from_to(self, start_tile, goal_tile):
         return self.astar_cached(start_tile, goal_tile)
     def update(self, dt):
-        # spawn queue update
+        # spawn queue
         if self.wave_in_progress and self.spawn_queue:
             for item in self.spawn_queue: item['frames'] -= 1
             while self.spawn_queue and self.spawn_queue[0]['frames'] <= 0:
@@ -636,10 +671,10 @@ class Game:
                 self.spawn_enemy(item['spec'])
         if self.wave_in_progress and not self.spawn_queue and not any(e.alive for e in self.enemies):
             self.wave_in_progress = False
-        # towers update
+        # towers
         for t in list(self.towers):
             t.update(dt, self.enemies, self.projectiles, self)
-        # projectiles update: build new list to avoid repeated removes
+        # projectiles: update and collect survivors
         new_projectiles = []
         for p in self.projectiles:
             p.update(self.enemies)
@@ -648,11 +683,12 @@ class Game:
             else:
                 if p.kind == 'splash':
                     tx,ty = p.x,p.y
-                    radius = getattr(p.owner_tower, 'extra', {}).get('splash_radius', getattr(p.owner_tower, 'extra', {}).get('aoe_radius', 44))
+                    radius = getattr(p.owner_tower,'extra',{}).get('splash_radius', getattr(p.owner_tower,'extra',{}).get('aoe_radius', 44))
+                    r2 = radius*radius
                     for e in self.enemies:
                         if not e.alive: continue
                         dx = e.x - tx; dy = e.y - ty
-                        if dx*dx + dy*dy <= radius*radius:
+                        if dx*dx + dy*dy <= r2:
                             factor = 1 - (math.hypot(dx,dy) / radius) * 0.6
                             dmg = int(p.damage * factor)
                             e.hp -= dmg
@@ -664,7 +700,7 @@ class Game:
                     else:
                         self.create_hit_effect(p.x,p.y,p.damage)
         self.projectiles = new_projectiles
-        # enemies update and tower destruction detection
+        # enemies update
         for e in list(self.enemies):
             if not e.alive:
                 if e.hp <= 0:
@@ -676,7 +712,7 @@ class Game:
                 except ValueError: pass
                 continue
             e.update(self._combined_grid, self.map.goal_tile, dt, self.tile_path_from_to, self.towers, self)
-        # remove destroyed towers and free cells
+        # towers destroyed -> free cells
         removed_any = False
         for t in list(self.towers):
             if t.hp <= 0:
@@ -692,7 +728,7 @@ class Game:
         for e in list(self.enemies):
             if e.hp <= 0 and e.alive:
                 e.alive = False
-        # update particles & popups
+        # particles & popups update
         for p in list(self.particles):
             p.update(dt)
             if p.age >= p.life:
@@ -738,80 +774,116 @@ class Game:
         tk = kind or self.selected_tower_kind
         tw = Tower(gx,gy,kind=tk)
         self.towers.append(tw)
-        # mark grid dirty and update combined grid and astar cache
         self.mark_grid_dirty()
         return True
     def draw(self, surf):
-        # background + base map + tower overlay
+        # background + base map
         surf.blit(self._background, (0,0))
-        self.map.draw(surf, tower_map_overlay=self.map.tower_map)
+        # compute a "main" path highlight from first spawn to goal for visuals only
+        path_tiles = self.tile_path_from_to(self.map.spawn_tiles[0], self.map.goal_tile)
+        self.map.draw(surf, tower_map_overlay=self.map.tower_map, path_tiles=path_tiles)
         # draw towers
-        for t in self.towers:
-            t.draw(surf)
-        # enemies - painter order
-        if len(self.enemies) > 16:
-            # only sort if many enemies
-            enemies_sorted = sorted(self.enemies, key=lambda en: en.y)
-        else:
-            enemies_sorted = self.enemies
-        for e in enemies_sorted:
-            e.draw(surf)
+        for t in self.towers: t.draw(surf)
+        # draw enemies (painter order)
+        enemies_sorted = sorted(self.enemies, key=lambda en: en.y) if len(self.enemies) > 16 else self.enemies
+        for e in enemies_sorted: e.draw(surf)
         # projectiles
-        for p in self.projectiles:
-            p.draw(surf)
+        for p in self.projectiles: p.draw(surf)
         # particles & popups
         for part in self.particles: part.draw(surf)
         for pop in self.popups: pop.draw(surf)
-        # HUD
-        hud_rect = pygame.Rect(0, SCREEN_H-140, SCREEN_W, 140)
-        pygame.draw.rect(surf, (12,12,16), hud_rect)
-        pygame.draw.line(surf, (40,40,60), (0, SCREEN_H-140), (SCREEN_W, SCREEN_H-140), 2)
-        draw_text(surf, f"Dinero: ${self.money}", 12, SCREEN_H-132)
-        draw_text(surf, f"Vidas: {self.lives}", 12, SCREEN_H-102)
-        draw_text(surf, f"Oleada: {self.wave}", 12, SCREEN_H-72)
-        draw_text(surf, f"Coste torre: ${TOWER_COST}   Ultimate: ${ULTIMATE_COST}", 260, SCREEN_H-132)
-        draw_text(surf, "SPACE: iniciar oleada    1-7: seleccionar torreta    Clic izquierdo: colocar", 260, SCREEN_H-102)
-        types = [('1','Basic'),('2','Slow'),('3','Splash'),('4','Rapid'),('5','Multi'),('6','Pierce'),('7','Ultimate')]
-        x0 = SCREEN_W - 480; y0 = SCREEN_H - 132
-        for i,(k,label) in enumerate(types):
-            col = WHITE if self.selected_tower_kind==label.lower() else (180,180,180)
-            draw_small_text(surf, f"{k}:{label}", x0 + i*68, y0, col)
-        # preview placement
+        # HUD area (improved layout)
+        hud_rect = pygame.Rect(0, MAP_H_PX, SCREEN_W, HUD_HEIGHT)
+        pygame.draw.rect(surf, UI_BG, hud_rect)
+        pygame.draw.line(surf, (40,40,60), (0, MAP_H_PX), (SCREEN_W, MAP_H_PX), 2)
+        # Left column (money, lives, wave)
+        left_x = 12
+        draw_text(surf, "DINERO", left_x, MAP_H_PX + 10, color=GOLD)
+        draw_text(surf, f"${self.money}", left_x, MAP_H_PX + 34, color=WHITE, bold=True)
+        draw_text(surf, "VIDAS", left_x, MAP_H_PX + 72, color=RED)
+        draw_text(surf, f"{self.lives}", left_x, MAP_H_PX + 96, color=WHITE, bold=True)
+        draw_text(surf, "OLEADA", left_x, MAP_H_PX + 134, color=YELLOW)
+        draw_text(surf, f"{self.wave}", left_x, MAP_H_PX + 158, color=WHITE, bold=True)
+        # Center area (controls)
+        center_x = SCREEN_W//2 - 200
+        draw_text(surf, "CONTROLES", center_x, MAP_H_PX + 8, color=WHITE)
+        draw_small_text(surf, "SPACE: iniciar oleada    1-7: seleccionar torreta    Clic: colocar", center_x, MAP_H_PX + 36, color=(200,200,200))
+        draw_small_text(surf, f"Coste torre: ${TOWER_COST}    Ultimate: ${ULTIMATE_COST}", center_x, MAP_H_PX + 64, color=(200,200,200))
+        # Right column: tower selection boxes with sprite and label
+        right_x = SCREEN_W - 420
+        box_w = 64; box_h = 72; gap = 14
+        tower_kinds = [('1','basic'),('2','slow'),('3','splash'),('4','rapid'),('5','multi'),('6','pierce'),('7','ultimate')]
+        # draw label
+        draw_text(surf, "TORRETAS", right_x, MAP_H_PX + 8, color=WHITE)
+        # draw boxes in two rows (wrap)
+        for idx, (key, kind) in enumerate(tower_kinds):
+            col = idx % 4
+            row = idx // 4
+            bx = right_x + col*(box_w + gap)
+            by = MAP_H_PX + 36 + row*(box_h + 8)
+            # highlight if selected
+            sel = (self.selected_tower_kind == kind)
+            box_rect = pygame.Rect(bx, by, box_w, box_h)
+            pygame.draw.rect(surf, (40,40,50) if not sel else (60,90,140), box_rect, border_radius=6)
+            # sprite scaled down to fit
+            spr = SPRITES.get('tower_'+kind)
+            if spr:
+                spr_s = pygame.transform.smoothscale(spr, (48,48))
+                surf.blit(spr_s, (bx + (box_w - spr_s.get_width())//2, by + 6))
+            # label
+            lbl = f"{key}"
+            draw_small_text(surf, lbl, bx + 4, by + box_h - 18, color=WHITE)
+            # show small stat hint (rate or special)
+            if kind == 'rapid':
+                draw_small_text(surf, "rápida", bx + 18, by + box_h - 18, color=(180,220,240))
+            elif kind == 'multi':
+                draw_small_text(surf, "spread", bx + 18, by + box_h - 18, color=(220,180,120))
+            elif kind == 'pierce':
+                draw_small_text(surf, "atraviesa", bx + 18, by + box_h - 18, color=(255,180,180))
+            elif kind == 'ultimate':
+                draw_small_text(surf, "ultimate", bx + 18, by + box_h - 18, color=GOLD)
+        # preview placement highlight (semi-transparent)
         mx,my = pygame.mouse.get_pos()
         gx = mx // TILE_SIZE; gy = my // TILE_SIZE
-        if my < GRID_H * TILE_SIZE:
+        if my < MAP_H_PX:
             rect = pygame.Rect(gx*TILE_SIZE+6, gy*TILE_SIZE+6, TILE_SIZE-12, TILE_SIZE-12)
             can = self.can_place_preview(gx,gy)
-            color_ok=(40,200,100); color_no=(200,60,60)
-            s = pygame.Surface((rect.w, rect.h), pygame.SRCALPHA); s.fill((* (color_ok if can else color_no), 100))
-            surf.blit(s, (rect.x, rect.y))
+            c = (40,200,100,110) if can else (200,60,60,110)
+            overlay = pygame.Surface((rect.w, rect.h), pygame.SRCALPHA)
+            overlay.fill(c)
+            surf.blit(overlay, (rect.x, rect.y))
     def can_place_preview(self,gx,gy):
         if gx<0 or gx>=GRID_W or gy<0 or gy>=GRID_H: return False
         if (gx,gy) in [s for s in self.map.spawn_tiles] or (gx,gy)==self.map.goal_tile: return False
         if self.map.grid[gy][gx]==1: return False
         if self.map.tower_map[gy][gx]==1: return False
+        # temporarily place and check reachability
         self.map.set_tower(gx,gy,True)
         ok=True
+        combined = self.map.get_combined_grid()
         for s in self.map.spawn_tiles:
-            if astar_on_grid(self.map.get_combined_grid(), s, self.map.goal_tile) is None:
+            if astar_on_grid(combined, s, self.map.goal_tile) is None:
                 ok=False; break
         self.map.set_tower(gx,gy,False)
         return ok
 
-# helper draw functions
-def draw_text(surf,text,x,y,color=WHITE):
-    img = font.render(text,True,color); surf.blit(img,(x,y))
-def draw_small_text(surf,text,x,y,color=WHITE):
-    img = small_font.render(text,True,color); surf.blit(img,(x,y))
+# helper draw text with optional bold
+def draw_text(surf, text, x, y, color=WHITE, bold=False):
+    f = font_bold if bold else font
+    img = f.render(str(text), True, color)
+    surf.blit(img, (x,y))
+def draw_small_text(surf, text, x, y, color=WHITE):
+    img = small_font.render(str(text), True, color)
+    surf.blit(img, (x,y))
 
 # -----------------------
-# MAIN LOOP
+# Main loop
 # -----------------------
 def main():
     game = Game()
     running = True
     while running:
-        dt = clock.tick(FPS)/1000.0
+        dt = clock.tick(FPS) / 1000.0
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running=False; break
@@ -829,7 +901,7 @@ def main():
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:
                     mx,my = pygame.mouse.get_pos()
-                    if my < GRID_H * TILE_SIZE:
+                    if my < MAP_H_PX:
                         gx = mx // TILE_SIZE; gy = my // TILE_SIZE
                         placed = game.place_tower(gx, gy, kind=game.selected_tower_kind)
                         if not placed:
@@ -837,6 +909,7 @@ def main():
         game.update(dt)
         off = SHAKE.offset()
         screen.fill(BLACK)
+        # draw into a temp surf to apply shake offset
         temp = pygame.Surface((SCREEN_W, SCREEN_H))
         game.draw(temp)
         screen.blit(temp, (int(off[0]), int(off[1])))
