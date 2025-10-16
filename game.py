@@ -9,8 +9,8 @@ from collections import deque
 # CONFIG (pantalla más grande + HUD mayor)
 # -----------------------
 TILE_SIZE = 40        # agrandado para más "presencia"
-GRID_W = 20
-GRID_H = 15
+GRID_W = 25
+GRID_H = 14
 MAP_W_PX = TILE_SIZE * GRID_W
 MAP_H_PX = TILE_SIZE * GRID_H
 
