@@ -6,7 +6,7 @@ import math
 # -----------------------
 TILE_SIZE = 48        # agrandado para más "presencia"
 GRID_W = 28
-GRID_H = 13
+GRID_H = 11
 MAP_W_PX = TILE_SIZE * GRID_W
 MAP_H_PX = TILE_SIZE * GRID_H
 
@@ -15,17 +15,20 @@ MAP_H_PX = TILE_SIZE * GRID_H
 # final SCREEN_H. Formula: HUD = (pct / (1-pct)) * MAP_H_PX
 # target HUD fraction of total window height (set between 0.30 and 0.40)
 # target HUD fraction of total window height
-HUD_PCT = 0.40  # HUD will occupy 40% of the total window height
-# compute HUD height so that HUD_HEIGHT / (MAP_H_PX + HUD_HEIGHT) == HUD_PCT
-# allow a slightly smaller minimum so the HUD can be shorter on smaller screens
-HUD_HEIGHT = max(80, int(MAP_H_PX * HUD_PCT / (1.0 - HUD_PCT)))
+HUD_PCT = 0.40  # legacy fraction (kept for reference)
+
+# Option: force a fixed window height (do not grow SCREEN_H beyond this)
+# Use SCREEN_H_FORCED to fix total window height; HUD_HEIGHT is derived so the map remains
+# MAP_H_PX high and the HUD fills the remaining space. Change SCREEN_H_FORCED as needed.
+SCREEN_H_FORCED = 800
+HUD_HEIGHT = max(48, SCREEN_H_FORCED - MAP_H_PX)
 SCREEN_W = MAP_W_PX
-SCREEN_H = MAP_H_PX + HUD_HEIGHT
+SCREEN_H = MAP_H_FORCED = SCREEN_H_FORCED
 
 FPS = 60
 
 # --- balance
-START_MONEY = 200
+START_MONEY = 500
 TOWER_COST = 80
 ULTIMATE_COST = 450
 
